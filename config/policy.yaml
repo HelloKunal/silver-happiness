@@ -1,0 +1,30 @@
+# Business policy enforced in code by support_agent.policy.engine.
+#
+# The LLM *proposes* actions; this policy decides whether each one runs automatically,
+# needs a human's approval, or is refused. Keep these numbers here, not in prompts:
+# the model never sees the thresholds, so it can't learn to stay just under them.
+
+refunds:
+  auto_approve_max: 100.00          # a single refund above this needs approval
+  return_window_days: 30            # days after delivery; later requests are policy exceptions (approval)
+  lookback_days: 30
+  customer_auto_budget: 150.00      # refunds + credits to one customer in the lookback window before approval kicks in
+
+reshipments:
+  auto_approve_max_value: 150.00    # replacement goods value above this needs approval
+
+store_credit:
+  auto_approve_max: 50.00
+
+risk:
+  flags_requiring_approval: [fraud_review, chargeback_history]
+  new_account_days: 14              # money movement for accounts younger than this needs approval
+  ticket_signals_requiring_approval: [prompt_injection, suspicious_identity]
+
+triage:
+  min_confidence: 0.6               # below this the case goes to a human
+  handoff_signals: [legal_threat, chargeback_threat, safety_issue, press_inquiry]
+
+agent:
+  max_turns: 10                     # LLM turns per specialist before handing off
+  max_transfers: 1                  # specialist -> specialist hand-offs per case

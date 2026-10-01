@@ -1,0 +1,57 @@
+# LLM gateway configuration.
+#
+# The gateway walks a route's `chain` in order. For each model it retries transient failures
+# (429 rate limits, 5xx/overloaded, timeouts) with jittered exponential backoff, then falls back
+# to the next model. A per-model circuit breaker skips a model that keeps failing, so an outage
+# costs one detection window instead of a timeout on every request.
+#
+# Adding a provider: implement support_agent.llm.base.LLMProvider, register it in
+# support_agent.llm.registry, and reference it here with `provider: <name>`.
+
+retry:
+  max_attempts_per_model: 3   # attempts on one model before falling back
+  base_delay_s: 1.0           # backoff: base * 2^(attempt-1), plus jitter
+  max_delay_s: 16.0
+  max_retry_after_s: 20.0     # if the provider asks us to wait longer than this, fall back instead of waiting
+
+circuit_breaker:
+  failure_threshold: 3        # consecutive failed calls before the circuit opens
+  cooldown_s: 60.0            # how long an open circuit skips the model before probing again
+
+request_timeout_s: 90
+
+models:
+  opus:
+    provider: anthropic
+    model: claude-opus-5-5
+    supports_effort: true
+    server_side_fallback: true   # Anthropic re-runs policy refusals on its recommended fallback model
+    cost_per_mtok: {input: 4.00, output: 20.00}
+  sonnet:
+    provider: anthropic
+    model: claude-sonnet-5-5
+    supports_effort: true
+    server_side_fallback: true
+    cost_per_mtok: {input: 2.00, output: 10.00}
+  haiku:
+    provider: anthropic
+    model: claude-haiku-4-5
+    supports_effort: false
+    server_side_fallback: false
+    cost_per_mtok: {input: 1.00, output: 5.00}
+
+# One route per kind of LLM work in the workflow. Chains are ordered: primary first.
+# For cheaper eval runs, put `sonnet` first.
+routes:
+  triage:
+    chain: [opus, sonnet, haiku]
+    effort: low
+    max_tokens: 8000
+  specialist:
+    chain: [opus, sonnet, haiku]
+    effort: medium
+    max_tokens: 16000
+  reply:
+    chain: [opus, sonnet, haiku]
+    effort: low
+    max_tokens: 8000
